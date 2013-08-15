@@ -37,7 +37,16 @@ function wpecom_user_mgmt() {
 	}
 	global $wpdb;
 	
-	echo "<p style='padding:20px 0 10px;'>";
+	$thepage = $_GET["thepage"];
+	
+	//Make the Unregistered User Data page open when clicking the Admin panel link
+	if($thepage == ''){
+		$thepage = 'unregistered';
+	}	
+	
+	echo "<p style='font-size:20px; font-weight:bold;'>E-Commerce User Management - ". ($thepage == 'unregistered' ? "Unregistered Users" : "Registered Users") . " </p>";
+	
+	echo "<p style='padding:0px 0 10px;'>";
 	
 	echo "<a href='admin.php?page=wpecomgmt&thepage=registered' style='float:left;'>";
 	echo "Registered User Data</a>";
@@ -48,7 +57,7 @@ function wpecom_user_mgmt() {
 	
 	echo"<hr style='width:100%;clear:both;' />";
 	
-	$thepage = $_GET["thepage"];
+
 	$userinfo = $_GET["userinfo"];
 	
 	$runform = $_POST["runform"];
@@ -64,8 +73,11 @@ function wpecom_user_mgmt() {
 	}
 	
 	if ($thepage=="registered") {
+
 		/* If $userinfo hasn't filled with requested information, list all registered users */
 		if ($userinfo<1) {
+			echo "<b>Registered Users</b></br>";
+			echo "<b>==========================================================================</b></br>";
 			echo '<div class="wrap">';
 
 			/* Checks how many registered users exist */
@@ -75,19 +87,18 @@ function wpecom_user_mgmt() {
 			$counter=1;
 			/* End Check */
 
-			while ($counter<=$usercount) {
-				$user_ID=$counter; 
+			$index = $usercount;
+			
+			while ($index >= $counter) {
+				$user_ID=$index; 
 				$meta_data = get_user_meta($user_ID, '_wpsc_customer_profile', true);
-				$meta_data = $meta_data['checkout_details'];
-
-				//var_dump($meta_data);
-				
-				if (isset($meta_data[2]) || isset($meta_data[3]) ) {
+				$meta_data = $meta_data['checkout_details'];				
+				if (isset($meta_data[2]) || isset($meta_data[3]) || isset($meta_data[9])) {
 					echo "<a href='admin.php?page=wpecomgmt&thepage=registered&userinfo=" . $user_ID . "'>";
-					echo $meta_data[2] . " " . $meta_data[3];
+					echo $meta_data[2] . " " . $meta_data[3] . " - " . $meta_data[9];
 					echo "</a></br>";
 				}
-				$counter++;
+				$index--;
 			}
 		} else {
 			/* This displays individual user data */
@@ -202,20 +213,12 @@ function wpecom_user_mgmt() {
 			$meta_data = null;
 			$saved_data_sql = "SELECT * FROM `".$wpdb->usermeta."` WHERE `user_id` = '".$user_ID."' AND `meta_key` = '_wpsc_customer_profile';";
 			$saved_data = $wpdb->get_row($saved_data_sql,ARRAY_A);
-
-			//var_dump($saved_data);
 			
-			//$meta_data = get_user_meta($user_ID, 'wpshpcrt_usr_profile');
 			$meta_data = get_user_meta($user_ID, '_wpsc_customer_profile', true);
 			$meta_data = $meta_data['checkout_details'];
-			
-			//var_dump($meta_data);
-			
-			
+						
 			$form_sql = "SELECT * FROM `".$wpdb->prefix."wpsc_checkout_forms` WHERE `active` ORDER BY `id`;";
 			$form_data = $wpdb->get_results($form_sql,ARRAY_A);
-			
-			//var_dump($form_data);
 
 			foreach($form_data as $form_field)
 			  {
@@ -306,9 +309,10 @@ function wpecom_user_mgmt() {
 		}
 	} elseif ($thepage=="unregistered") {
 		if ($userinfo<1) {
-			
+			echo "<b>Unregistered Users</b></br>";
+			echo "<b>==========================================================================</b></br>";
 			//Get distinct email-addresses to find 'unique' customers
-			$distinct_mails = $wpdb->get_results("SELECT DISTINCT value FROM `".$wpdb->prefix."wpsc_submited_form_data` WHERE  `form_id` =9", ARRAY_N);
+			$distinct_mails = $wpdb->get_results("SELECT DISTINCT value FROM `".$wpdb->prefix."wpsc_submited_form_data` WHERE  `form_id` = 9", ARRAY_N);
 			$distinct_customer_ids = array();
 			
 			//Get the last log_id for the distinct email-addresses and put them in $distinct_customer_ids
@@ -317,17 +321,21 @@ function wpecom_user_mgmt() {
 				$log_id = $wpdb->get_var($query);
 				array_push($distinct_customer_ids, $log_id);
 			}			
+			
+			arsort($distinct_customer_ids);
 
 			//loop over $distinct_customer_ids to show the distinct customers
 			foreach($distinct_customer_ids as $distinct_customer_id){
 				$user_ID = $distinct_customer_id;
 				$firstname = $wpdb->get_results( "SELECT value FROM ".$wpdb->prefix."wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=2" );
 				$lastname = $wpdb->get_results( "SELECT value FROM ".$wpdb->prefix."wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=3" );
+				$mail = $wpdb->get_results( "SELECT value FROM ".$wpdb->prefix."wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=9" );
 				$firstname = $firstname[0]->value;
 				$lastname = $lastname[0]->value;
-				if (isset($firstname) || isset($lastname) ) {
+				$mail = $mail[0]->value;
+				if (isset($firstname) || isset($lastname) || isset($mail)) {
 					echo "<a href='admin.php?page=wpecomgmt&thepage=unregistered&userinfo=" . $user_ID . "'>";
-					echo $firstname . " " . $lastname;
+					echo $firstname . " " . $lastname . " - " . $mail;
 					echo "</a>";
 					echo "</br>";
 				}
@@ -371,6 +379,8 @@ function wpecom_user_mgmt() {
 			echo "<input type='submit' value='Submit' name='submit' style='clear:both;float:left;margin:15px 0 0;' />";
 			echo "</form></div>";
 		}
+	} else {
+		echo "Click Above";
 	}
 }
 

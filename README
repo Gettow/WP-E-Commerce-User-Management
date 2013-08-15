@@ -13,7 +13,7 @@ Allows Wordpress administrators to edit user data saved by WP E-Commerce.
 == Installation ==
 
 1. Upload WP-E-Commerce-User-Management to the Plugins directory
-1. Activate the plugin through the 'Plugins' menu in WordPress
+2. Activate the plugin through the 'Plugins' menu in WordPress
 
 
 
