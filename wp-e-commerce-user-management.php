@@ -54,12 +54,12 @@ function wpecom_user_mgmt() {
 	$runform = $_POST["runform"];
 	$formids=$_POST["formids"];
 	$log_id=$_POST["userinfo"];
-	$formids = $wpdb->get_results( "SELECT id,name,type FROM wp_wpsc_checkout_forms" );
+	$formids = $wpdb->get_results( "SELECT id,name,type FROM ".$wpdb->prefix."wpsc_checkout_forms" );
 	if ($runform==1) {
 		foreach ($formids as $theids) {
 			$id=$theids->id;
 			$updateddata=$_POST[$id];
-			$wpdb->query("UPDATE wp_wpsc_submited_form_data SET value='".$updateddata."' WHERE form_id=".$id." AND log_id=".$log_id);
+			$wpdb->query("UPDATE ".$wpdb->prefix."wpsc_submited_form_data SET value='".$updateddata."' WHERE form_id=".$id." AND log_id=".$log_id);
 		}
 	}
 	
@@ -69,7 +69,7 @@ function wpecom_user_mgmt() {
 			echo '<div class="wrap">';
 
 			/* Checks how many registered users exist */
-			$allUIDs=$wpdb->get_results( "SELECT user_id FROM wp_usermeta" );
+			$allUIDs=$wpdb->get_results( "SELECT user_id FROM ".$wpdb->prefix."usermeta ORDER BY user_id DESC" );
 			$allUIDs=max($allUIDs);
 			$usercount=$allUIDs->user_id;
 			$counter=1;
@@ -77,11 +77,15 @@ function wpecom_user_mgmt() {
 
 			while ($counter<=$usercount) {
 				$user_ID=$counter; 
-				$meta_data = get_usermeta($user_ID, 'wpshpcrt_usr_profile');
+				$meta_data = get_user_meta($user_ID, '_wpsc_customer_profile', true);
+				$meta_data = $meta_data['checkout_details'];
+
+				//var_dump($meta_data);
+				
 				if (isset($meta_data[2]) || isset($meta_data[3]) ) {
-					echo "<p style='padding:0 0 10px;'><a href='admin.php?page=wpecomgmt&thepage=registered&userinfo=" . $user_ID . "'>";
+					echo "<a href='admin.php?page=wpecomgmt&thepage=registered&userinfo=" . $user_ID . "'>";
 					echo $meta_data[2] . " " . $meta_data[3];
-					echo "</a></p>";
+					echo "</a></br>";
 				}
 				$counter++;
 			}
@@ -93,7 +97,7 @@ function wpecom_user_mgmt() {
 			$_SESSION['collected_data'] = null;
 			if($_POST['collected_data'] != null) {
 			  foreach((array)$_POST['collected_data'] as $value_id => $value) {
-			    $form_sql = "SELECT * FROM `".WPSC_TABLE_CHECKOUT_FORMS."` WHERE `id` = '$value_id' LIMIT 1";
+			    $form_sql = "SELECT * FROM `".$wpdb->prefix."wpsc_checkout_forms` WHERE `id` = '$value_id' LIMIT 1";
 			    $form_data = $wpdb->get_results($form_sql,ARRAY_A);
 			    $form_data = $form_data[0];
 			    $bad_input = false;
@@ -158,9 +162,29 @@ function wpecom_user_mgmt() {
 						$meta_data[$value_id] = $value;
 					}
 				}
-
-			  $new_meta_data = serialize($meta_data);
-			  update_usermeta($user_ID, 'wpshpcrt_usr_profile', $meta_data);
+			  
+			  $saved_data_sql = "SELECT * FROM `".$wpdb->usermeta."` WHERE `user_id` = '".$user_ID."' AND `meta_key` = '_wpsc_customer_profile';";
+				$saved_data = $wpdb->get_row($saved_data_sql,ARRAY_A);
+				$old_meta_data = $saved_data['meta_value'];				
+				$old_unserialized = maybe_unserialize($old_meta_data);
+				
+				
+				$i = 1;
+				while ($i <= sizeof($old_unserialized['checkout_details'])){
+					if (array_key_exists($i, $meta_data)){
+					} else {
+						$cd = $old_unserialized['checkout_details'];
+						$meta_data[$i] = $cd[$i];
+					}
+					$i++;
+				}
+				
+				ksort($meta_data);
+				
+				$old_unserialized['checkout_details'] = $meta_data; //overwrite the old checkout_details
+				$new_serialized = maybe_serialize($old_unserialized);
+			  
+			  update_user_meta($user_ID, '_wpsc_customer_profile', $old_unserialized);
 			} 
 			?>
 			<div class="wrap" style=''>
@@ -176,13 +200,22 @@ function wpecom_user_mgmt() {
 			<?php
 			// arr, this here be where the data will be saved
 			$meta_data = null;
-			$saved_data_sql = "SELECT * FROM `".$wpdb->usermeta."` WHERE `user_id` = '".$user_ID."' AND `meta_key` = 'wpshpcrt_usr_profile';";
+			$saved_data_sql = "SELECT * FROM `".$wpdb->usermeta."` WHERE `user_id` = '".$user_ID."' AND `meta_key` = '_wpsc_customer_profile';";
 			$saved_data = $wpdb->get_row($saved_data_sql,ARRAY_A);
 
-			$meta_data = get_usermeta($user_ID, 'wpshpcrt_usr_profile');
-
-			$form_sql = "SELECT * FROM `".WPSC_TABLE_CHECKOUT_FORMS."` WHERE `active` = '1' ORDER BY `order`;";
+			//var_dump($saved_data);
+			
+			//$meta_data = get_user_meta($user_ID, 'wpshpcrt_usr_profile');
+			$meta_data = get_user_meta($user_ID, '_wpsc_customer_profile', true);
+			$meta_data = $meta_data['checkout_details'];
+			
+			//var_dump($meta_data);
+			
+			
+			$form_sql = "SELECT * FROM `".$wpdb->prefix."wpsc_checkout_forms` WHERE `active` ORDER BY `id`;";
 			$form_data = $wpdb->get_results($form_sql,ARRAY_A);
+			
+			//var_dump($form_data);
 
 			foreach($form_data as $form_field)
 			  {
@@ -273,37 +306,41 @@ function wpecom_user_mgmt() {
 		}
 	} elseif ($thepage=="unregistered") {
 		if ($userinfo<1) {
+			
+			//Get distinct email-addresses to find 'unique' customers
+			$distinct_mails = $wpdb->get_results("SELECT DISTINCT value FROM `".$wpdb->prefix."wpsc_submited_form_data` WHERE  `form_id` =9", ARRAY_N);
+			$distinct_customer_ids = array();
+			
+			//Get the last log_id for the distinct email-addresses and put them in $distinct_customer_ids
+			foreach($distinct_mails as $mail){
+				$query = "SELECT `log_id` FROM `".$wpdb->prefix."wpsc_submited_form_data` WHERE `value` = '".$mail[0]."' ORDER BY  `log_id` DESC LIMIT 1";
+				$log_id = $wpdb->get_var($query);
+				array_push($distinct_customer_ids, $log_id);
+			}			
 
-			/* Checks how many unregistered users exist */
-			$allUIDs=$wpdb->get_results( "SELECT log_id FROM wp_wpsc_submited_form_data" );
-			$allUIDs=max($allUIDs);
-			$usercount=$allUIDs->log_id;
-			$counter=1;
-			/* End Check */
-
-			while ($counter<=$usercount) {
-				$user_ID=$counter; 
-				$firstname = $wpdb->get_results( "SELECT value FROM wp_wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=2" );
-				$lastname = $wpdb->get_results( "SELECT value FROM wp_wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=3" );
+			//loop over $distinct_customer_ids to show the distinct customers
+			foreach($distinct_customer_ids as $distinct_customer_id){
+				$user_ID = $distinct_customer_id;
+				$firstname = $wpdb->get_results( "SELECT value FROM ".$wpdb->prefix."wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=2" );
+				$lastname = $wpdb->get_results( "SELECT value FROM ".$wpdb->prefix."wpsc_submited_form_data WHERE log_id=" . $user_ID . " AND form_id=3" );
 				$firstname = $firstname[0]->value;
 				$lastname = $lastname[0]->value;
 				if (isset($firstname) || isset($lastname) ) {
-					echo "<p style='padding:0 0 10px;'><a href='admin.php?page=wpecomgmt&thepage=unregistered&userinfo=" . $user_ID . "'>";
-				
+					echo "<a href='admin.php?page=wpecomgmt&thepage=unregistered&userinfo=" . $user_ID . "'>";
 					echo $firstname . " " . $lastname;
-					echo "</a></p>";
+					echo "</a>";
+					echo "</br>";
 				}
-				$counter++;
 			}
 		} else {
 			$user_ID = $userinfo;
-			$formids = $wpdb->get_results( "SELECT id,name,type FROM wp_wpsc_checkout_forms" );
+			$formids = $wpdb->get_results( "SELECT id,name,type FROM ".$wpdb->prefix."wpsc_checkout_forms" );
 			echo "<div style='width:350px;'><form method='post' action=''>";
 				foreach ($formids as $theids) {
 					$id=$theids->id;
 					$name=$theids->name;
 					$type=$theids->type;
-					$formdata = $wpdb->get_results( "SELECT value FROM wp_wpsc_submited_form_data WHERE log_id=" . $userinfo . " AND form_id=" . $id );
+					$formdata = $wpdb->get_results( "SELECT value FROM ".$wpdb->prefix."wpsc_submited_form_data WHERE log_id=" . $userinfo . " AND form_id=" . $id );
 					$formdata = $formdata[0]->value;
 					switch ($type) {
 						case "heading";
@@ -317,13 +354,13 @@ function wpecom_user_mgmt() {
 						case "Zip Code";
 						case "Email";
 						echo "<span style='float:left;clear:both;margin:0 0 10px;'>" . $name . "</span>";
-						echo "<span style='float:right;'><input type='text' name='" . $id . "' value='" . $formdata . "' onblur=\"if (this.value == '') {this.value = '" . $formdata . "'; this.style.color = '#000000';}\" onfocus=\"if (this.value == '" . $formdata . "') {this.value = ''; this.style.color = '#000000'; }\"></input></span>";
+						echo "<span style='float:right;'><input type='text' name='" . $id . "' value='" . $formdata ."'></input></span>";
 					break;
 						
 					default:
 						if ($type!="heading" && $name!="Country" && $name!="State") {
 							echo "<span style='float:left;clear:both;'>" . $name . "</span>";
-							echo "<span style='float:right;'><input type='text' name='" . $id . "' value='" . $formdata . "' onblur=\"if (this.value == '') {this.value = '" . $formdata . "'; this.style.color = '#000000';}\" onfocus=\"if (this.value == '" . $formdata . "') {this.value = ''; this.style.color = '#000000'; }\"></input></span>";
+							echo "<span style='float:right;'><input type='text' name='" . $id . "' value='" . $formdata . "'></input></span>";
 						}
 					break;
 					}
