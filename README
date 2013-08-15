@@ -14,3 +14,13 @@ Allows Wordpress administrators to edit user data saved by WP E-Commerce.
 
 1. Upload WP-E-Commerce-User-Management to the Plugins directory
 1. Activate the plugin through the 'Plugins' menu in WordPress
+
+
+
+== Fixes ==
+Update to Wordpress 3.6 + WPSC 3.8.1
+ - Database prefix
+ - Database table
+ - Meta data
+ - Only slow 'unique' UNREGISTERED customers based on email address
+ - Slight layout changes
