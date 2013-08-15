@@ -317,9 +317,15 @@ function wpecom_user_mgmt() {
 			
 			//Get the last log_id for the distinct email-addresses and put them in $distinct_customer_ids
 			foreach($distinct_mails as $mail){
-				$query = "SELECT `log_id` FROM `".$wpdb->prefix."wpsc_submited_form_data` WHERE `value` = '".$mail[0]."' ORDER BY  `log_id` DESC LIMIT 1";
-				$log_id = $wpdb->get_var($query);
-				array_push($distinct_customer_ids, $log_id);
+				//Filter emails that are in the user table
+				$exists_in_users = "SELECT * FROM ".$wpdb->prefix."users WHERE `user_email` = '".$mail[0]."'";
+				$does_exist = $wpdb->get_results($exists_in_users);
+				
+				if(!$does_exist){
+					$query = "SELECT `log_id` FROM `".$wpdb->prefix."wpsc_submited_form_data` WHERE `value` = '".$mail[0]."' ORDER BY  `log_id` DESC LIMIT 1";
+					$log_id = $wpdb->get_var($query);
+					array_push($distinct_customer_ids, $log_id);
+				}
 			}			
 			
 			arsort($distinct_customer_ids);
